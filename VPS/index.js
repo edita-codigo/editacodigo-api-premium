@@ -6,6 +6,7 @@ global.crypto = crypto.webcrypto || crypto;
 const axios   = require("axios");
 const express = require("express");
 const fs      = require("fs");
+const path    = require("path");
 const https   = require("https");
 const dotenv  = require("dotenv");
 const qrcode  = require("qrcode-terminal");
@@ -156,7 +157,7 @@ async function iniciarTentativasRecarregar() {
 
 async function recuperarSessoesAtivas() {
   try {
-    const CAMINHO_SESSOES = "/opt/editacodigo/sessions";
+    const CAMINHO_SESSOES = path.join(process.cwd(), "sessions");
 
     console.log("\n🔍 Verificando sessões ativas...\n");
 
