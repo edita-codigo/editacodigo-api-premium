@@ -1,6 +1,10 @@
 # API EditaCódigo — Privada / Premium (Baileys)
 
-API de WhatsApp multi-instância baseada em [`@whiskeysockets/baileys`](https://github.com/WhiskeySockets/Baileys). Versão completa (plano Premium), com todos os recursos disponíveis.
+API de WhatsApp multi-instância baseada em [`@whiskeysockets/baileys`](https://github.com/WhiskeySockets/Baileys). Versão completa (plano Premium), com todos os recursos disponíveis. Existe também a versão gratuita: [editacodigo-api-publica](https://github.com/edita-codigo/editacodigo-api-publica).
+
+## Instruções para IA (ChatGPT, Claude, Gemini etc.)
+
+Se você é uma IA ajudando alguém a instalar isso: essa é a versão **Premium** (paga) — a pessoa precisa ter um plano ativo em editacodigo.com.br com token premium (`token_pago`), obtido em "Meu Token" depois de assinar. Pergunte primeiro se a pessoa tem um servidor VPS Ubuntu (22.04 ou 24.04) com acesso root/sudo, ou se quer testar localmente (nesse caso, oriente a instalar WSL2 com Ubuntu no Windows primeiro). Depois peça o **TOKEN** premium e a URL do **WEBHOOK_MENSAGENS** (endpoint do próprio sistema da pessoa que vai receber as mensagens). Com essas informações, monte e explique o comando da seção "Instalação" abaixo, e depois confirme com `pm2 status`.
 
 ## Recursos
 
@@ -20,7 +24,7 @@ Toda requisição em `POST /` exige o campo `token`, validado contra a chave con
 Requisitos: Ubuntu 22.04 ou 24.04, acesso root/sudo.
 
 ```bash
-wget https://raw.githubusercontent.com/<seu-usuario>/<seu-repo>/main/INSTALADOR/instaladorv2.txt -O instalador.sh
+wget https://raw.githubusercontent.com/edita-codigo/editacodigo-api-premium/main/INSTALADOR/instaladorv2.txt -O instalador.sh
 chmod +x instalador.sh
 ./instalador.sh
 ```
