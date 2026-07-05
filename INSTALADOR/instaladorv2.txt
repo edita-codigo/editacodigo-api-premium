@@ -1,0 +1,266 @@
+#!/bin/bash
+
+set +e
+
+INSTALL_PATH="/opt/editacodigo"
+PROCESS_NAME="EDITACODIGO V3 -1"
+
+echo "==============================================="
+echo "   INSTALADOR EDITACODIGO V3 -1 (BAILEYS)"
+echo "==============================================="
+
+###########################################
+# 0. DETECTA VERSÃƒO DO UBUNTU
+###########################################
+echo "ðŸ” Detectando versÃ£o do Ubuntu..."
+
+if [ -f /etc/os-release ]; then
+  . /etc/os-release
+  UBUNTU_VERSION=$VERSION_ID
+  echo "âœ… Ubuntu $UBUNTU_VERSION detectado"
+else
+  echo "âŒ NÃ£o foi possÃ­vel detectar versÃ£o do Ubuntu"
+  exit 1
+fi
+
+if [[ "$UBUNTU_VERSION" != "22.04" && "$UBUNTU_VERSION" != "24.04" ]]; then
+  echo "âš ï¸  Aviso: Este instalador foi testado em Ubuntu 22.04 e 24.04"
+  echo "   VocÃª tem Ubuntu $UBUNTU_VERSION. Continuando mesmo assim..."
+fi
+
+###########################################
+# 1. REMOVE SOMENTE ESTE PROCESSO (SE EXISTIR)
+###########################################
+echo "ðŸ”Ž Verificando processo PM2..."
+
+if command -v pm2 >/dev/null 2>&1; then
+  # Remove processo generico EDITACODIGO se existir
+  if pm2 list | grep -q "EDITACODIGO"; then
+    pm2 delete EDITACODIGO 2>/dev/null || true
+    pm2 save || true
+  fi
+
+  # Remove processo desta instalacao pelo nome exato
+  if pm2 list | grep -q "$PROCESS_NAME"; then
+    echo "Removendo processo antigo $PROCESS_NAME..."
+    pm2 delete "$PROCESS_NAME" || true
+    pm2 save || true
+  else
+    echo "Processo nao existe, continuando..."
+  fi
+else
+  echo "PM2 ainda nao instalado, continuando..."
+fi
+###########################################
+# 2. REMOVE SOMENTE A PASTA DESTA INSTALAÃ‡ÃƒO
+###########################################
+echo "ðŸ” Verificando pasta antiga..."
+
+if [ -d "$INSTALL_PATH" ]; then
+  echo "ðŸ—‘ï¸  Removendo pasta antiga..."
+  sudo rm -rf "$INSTALL_PATH"
+else
+  echo "âœ… Pasta nÃ£o existe, continuando..."
+fi
+
+###########################################
+# 3. COLETA VARIÃVEIS (SE NÃƒO VIEREM POR ENV)
+###########################################
+if [ -z "$PORTA" ]; then
+  read -p "Digite a PORTA (ex: 443): " PORTA
+fi
+
+if [ -z "$TOKEN" ]; then
+  read -p "Digite o TOKEN: " TOKEN
+fi
+
+if [ -z "$WEBHOOK_FUNCOES" ]; then
+  read -p "Digite o WEBHOOK_FUNCOES: " WEBHOOK_FUNCOES
+fi
+
+if [ -z "$WEBHOOK_MENSAGENS" ]; then
+  read -p "Digite o WEBHOOK_MENSAGENS: " WEBHOOK_MENSAGENS
+fi
+
+if [ -z "$WEBHOOK_VALIDATE" ]; then
+  read -p "Digite o WEBHOOK_VALIDATE: " WEBHOOK_VALIDATE
+fi
+
+###########################################
+# 4. ATUALIZA SISTEMA
+###########################################
+echo "â¬†ï¸  Atualizando sistema..."
+sudo apt update -y
+sudo apt install -y curl wget unzip git openssl build-essential python3-dev
+
+echo "âœ… Pacotes base instalados"
+
+###########################################
+# 5. INSTALA / ATUALIZA NODE 20+ E PM2
+###########################################
+
+# Verificar se Node estÃ¡ instalado e qual versÃ£o
+NODE_MAJOR=0
+if command -v node >/dev/null 2>&1; then
+  NODE_MAJOR=$(node -e "process.stdout.write(process.versions.node.split('.')[0])" 2>/dev/null || echo "0")
+fi
+
+# Baileys 7.x exige Node 20+ â€” forÃ§ar upgrade se necessÃ¡rio
+if [ "$NODE_MAJOR" -lt 20 ] 2>/dev/null; then
+  echo "ðŸ“¦ Node.js $NODE_MAJOR detectado â€” instalando Node.js 20.x (exigido pelo Baileys)..."
+  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+  sudo apt install -y nodejs
+else
+  echo "âœ… Node.js $NODE_MAJOR jÃ¡ compatÃ­vel"
+fi
+
+if ! command -v pm2 >/dev/null 2>&1; then
+  echo "ðŸ“¦ Instalando PM2..."
+  sudo npm install -g pm2
+fi
+
+echo "âœ… Node.js versÃ£o: $(node -v)"
+echo "âœ… NPM versÃ£o: $(npm -v)"
+
+###########################################
+# 6. CRIA ESTRUTURA DE PASTAS
+###########################################
+echo "ðŸ“ Criando estrutura..."
+SSL_PATH="$INSTALL_PATH/ssl"
+sudo mkdir -p "$SSL_PATH"
+sudo mkdir -p "$INSTALL_PATH/sessions"
+sudo chown -R "$USER":"$USER" "$INSTALL_PATH"
+
+###########################################
+# 7. BAIXA INDEX.JS
+###########################################
+echo "â¬‡ï¸  Baixando index.js..."
+wget -O "$INSTALL_PATH/index.js" "https://tasmota.com.br/api/index.js"
+
+if [ ! -f "$INSTALL_PATH/index.js" ]; then
+  echo "âŒ Erro ao baixar index.js"
+  exit 1
+fi
+
+echo "âœ… index.js baixado com sucesso"
+
+###########################################
+# 8. GERA CERTIFICADO SSL
+###########################################
+echo "ðŸ” Gerando SSL..."
+openssl req -x509 -nodes -days 365 \
+  -newkey rsa:2048 \
+  -keyout "$SSL_PATH/key.pem" \
+  -out "$SSL_PATH/cert.pem" \
+  -subj "/CN=localhost"
+
+echo "âœ… Certificado SSL gerado"
+
+###########################################
+# 9. CRIA PACKAGE.JSON (BAILEYS â€” SEM PUPPETEER)
+###########################################
+cd "$INSTALL_PATH"
+
+cat <<EOF > package.json
+{
+  "name": "editacodigo-baileys",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "@whiskeysockets/baileys": "latest",
+    "qrcode-terminal": "^0.12.0",
+    "pino": "^8.21.0"
+  }
+}
+EOF
+
+echo "âœ… package.json criado (Baileys)"
+
+###########################################
+# 10. INSTALA DEPENDÃŠNCIAS NODE
+###########################################
+echo "ðŸ“¦ Instalando dependÃªncias Node..."
+npm install --legacy-peer-deps
+
+if [ $? -ne 0 ]; then
+  echo "âŒ Erro ao instalar dependÃªncias"
+  exit 1
+fi
+
+echo "âœ… DependÃªncias Node instaladas com sucesso"
+
+###########################################
+# 11. CRIA .ENV
+###########################################
+cat <<EOF > .env
+PORTA=$PORTA
+TOKEN=$TOKEN
+WEBHOOK_FUNCOES=$WEBHOOK_FUNCOES
+WEBHOOK_MENSAGENS=$WEBHOOK_MENSAGENS
+WEBHOOK_VALIDATE=$WEBHOOK_VALIDATE
+EOF
+
+echo "âœ… Arquivo .env criado"
+
+###########################################
+# 12. ATUALIZA SISTEMA (FINAL)
+###########################################
+echo "â¬†ï¸  Atualizando sistema..."
+sudo apt update -y
+sudo apt upgrade -y -o Dpkg::Options::="--force-confnew"
+sudo apt autoremove -y
+
+echo "âœ… Sistema atualizado"
+
+###########################################
+# 13. INICIA COM PM2 (RESTART A CADA 3H)
+###########################################
+echo "ðŸš€ Iniciando processo..."
+
+pm2 start index.js \
+  --name "$PROCESS_NAME" \
+  --cron-restart="0 */3 * * *"
+
+if [ $? -ne 0 ]; then
+  echo "âŒ Erro ao iniciar PM2"
+  exit 1
+fi
+
+echo "âœ… Processo iniciado com sucesso"
+
+###########################################
+# 14. SAVE + STARTUP
+###########################################
+pm2 save
+
+STARTUP_CMD=$(pm2 startup systemd -u "$USER" --hp "/home/$USER" | grep sudo)
+if [ ! -z "$STARTUP_CMD" ]; then
+  eval "$STARTUP_CMD" 2>/dev/null || true
+fi
+
+pm2 status
+
+###########################################
+# FINAL
+###########################################
+echo ""
+echo "==============================================="
+echo "âœ… INSTALAÃ‡ÃƒO CONCLUÃDA â€” EDITACODIGO V3 -1"
+echo "ðŸ” VersÃ£o Ubuntu  : $UBUNTU_VERSION"
+echo "âš™ï¸  Engine         : @whiskeysockets/baileys"
+echo "ðŸ”„ Restart auto   : a cada 3 horas"
+echo "ðŸŸ¢ Processo ativo : $PROCESS_NAME"
+echo "ðŸ” SSL em         : $SSL_PATH"
+echo "ðŸ“ InstalaÃ§Ã£o em  : $INSTALL_PATH"
+echo "ðŸ“‚ SessÃµes em     : $INSTALL_PATH/sessions"
+echo "==============================================="
+echo ""
+echo "Para verificar o status:"
+echo "  pm2 status"
+echo ""
+echo "Para ver logs:"
+echo "  pm2 logs '$PROCESS_NAME'"
+echo ""
