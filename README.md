@@ -24,7 +24,7 @@ Toda requisição em `POST /` exige o campo `token`, validado contra a chave con
 Requisitos: Ubuntu 22.04 ou 24.04, acesso root/sudo.
 
 ```bash
-wget https://raw.githubusercontent.com/edita-codigo/editacodigo-api-premium/main/INSTALADOR/instaladorv2.txt -O instalador.sh
+wget https://raw.githubusercontent.com/edita-codigo/editacodigo-api-premium/master/INSTALADOR/instaladorv2.txt -O instalador.sh
 chmod +x instalador.sh
 ./instalador.sh
 ```
